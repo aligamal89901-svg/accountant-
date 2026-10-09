@@ -2,6 +2,9 @@
 *.class
 *.log
 *.pyc
+*.bak
+*.bak2
+web_server.py
 *.swp
 .DS_Store
 .atom/
