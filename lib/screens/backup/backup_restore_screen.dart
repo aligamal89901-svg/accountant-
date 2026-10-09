@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:printing/printing.dart';
@@ -121,16 +122,26 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   /// 3. استرداد ذكي: فحص نوع الملف (JSON للنظام أو XLSX للمنتجات) وتوجيهه تلقائياً
   Future<void> _pickAndSmartRestore() async {
     try {
-      final files = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json', 'xlsx', 'xls', 'db'],
+      // الحل: استخدام FileType.any بدلاً من FileType.custom
+      // لأن FileType.custom مع allowedExtensions يسبب ظهور شاشة فارغة في بعض أجهزة أندرويد
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
       );
 
-      if (files.isEmpty) return;
+      if (result == null || result.files.isEmpty) return;
 
-      final file = files.first;
-      final bytes = await file.readAsBytes();
-      if (bytes.isEmpty) {
+      final file = result.files.single;
+
+      // قراءة بايتات الملف
+      Uint8List? bytes;
+      if (file.bytes != null) {
+        bytes = file.bytes;
+      } else if (file.path != null) {
+        bytes = await File(file.path!).readAsBytes();
+      }
+
+      if (bytes == null || bytes.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('الملف المحدد فارغ'), backgroundColor: AppTheme.warning),
@@ -140,6 +151,19 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       }
 
       final ext = file.name.split('.').last.toLowerCase();
+
+      // التحقق من الامتدادات المدعومة
+      if (!['json', 'xlsx', 'xls', 'db'].contains(ext)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('نوع الملف (${file.name}) غير مدعوم للاسترداد. يرجى اختيار ملف .json أو .xlsx'),
+              backgroundColor: AppTheme.warning,
+            ),
+          );
+        }
+        return;
+      }
 
       // التحقق: هل الملف XLSX (يبدأ بـ PK\x03\x04 أو امتداد xlsx)
       final isXlsx = ext == 'xlsx' || ext == 'xls' ||
@@ -157,12 +181,6 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         if (!mounted) return;
         await _handleJsonSystemRestore(file.name, bytes);
         return;
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('نوع الملف (${file.name}) غير مدعوم للاسترداد. يرجى اختيار ملف .json أو .xlsx'), backgroundColor: AppTheme.warning),
-        );
       }
     } catch (e) {
       if (mounted) {

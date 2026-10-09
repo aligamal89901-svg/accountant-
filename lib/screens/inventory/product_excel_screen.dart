@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
@@ -73,16 +74,40 @@ class _ProductExcelScreenState extends State<ProductExcelScreen> with SingleTick
   /// اختيار ملف XLSX وقراءته ومعاينته
   Future<void> _pickAndAnalyzeFile() async {
     try {
-      final files = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['xlsx'],
+      // الحل: استخدام FileType.any بدلاً من FileType.custom
+      // لأن FileType.custom مع allowedExtensions يسبب ظهور شاشة فارغة في بعض أجهزة أندرويد
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
       );
 
-      if (files.isEmpty) return;
+      if (result == null || result.files.isEmpty) return;
 
-      final file = files.first;
-      final bytes = await file.readAsBytes();
-      if (bytes.isEmpty) {
+      final file = result.files.single;
+      final ext = file.name.split('.').last.toLowerCase();
+
+      // التحقق من امتداد الملف يدوياً
+      if (ext != 'xlsx' && ext != 'xls') {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('يرجى اختيار ملف Excel بصيغة XLSX أو XLS. الملف المختار: ${file.name}'),
+              backgroundColor: AppTheme.warning,
+            ),
+          );
+        }
+        return;
+      }
+
+      // قراءة بايتات الملف
+      Uint8List? bytes;
+      if (file.bytes != null) {
+        bytes = file.bytes;
+      } else if (file.path != null) {
+        bytes = await File(file.path!).readAsBytes();
+      }
+
+      if (bytes == null || bytes.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('تعذر قراءة بيانات الملف المختار'), backgroundColor: AppTheme.danger),
